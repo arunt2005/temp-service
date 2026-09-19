@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Handwritten Digit Recognition</title>
+  <!-- Load TensorFlow.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      touch-action: none; /* Prevents mobile scrolling while drawing */
+    }
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f4f4f9;
+    }
+    h2 {
+      margin-bottom: 10px;
+    }
+    #canvas-container {
+      position: relative;
+    }
+    canvas {
+      border: 4px solid #333;
+      border-radius: 12px;
+      background-color: #000; /* Black background for high contrast */
+      cursor: crosshair;
+    }
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:active {
+      background-color: #0056b3;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Draw a digit (0-9)</h2>
+  
+  <div id="canvas-container">
+    <canvas id="drawCanvas" width="280" height="280"></canvas>
+  </div>
+
+  <div class="controls">
+    <button onclick="clearCanvas()">Clear</button>
+    <button onclick="predictDigit()">Recognize</button>
+  </div>
+
+  <div id="output">Prediction: -</div>
+
+  <script>
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let model;
+
+    // Initialize Canvas settings
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 18;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Load pre-trained TensorFlow.js MNIST model
+    async function loadModel() {
+      document.getElementById('output').innerText = "Loading model...";
+      // Using a light pre-trained MNIST model
+      model = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mnist_v1/model.json');
+      document.getElementById('output').innerText = "Prediction: Ready!";
+    }
+    loadModel();
+
+    // Event listeners for Mouse & Touch support
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+
+    canvas.addEventListener('touchstart', startDrawing);
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchend', stopDrawing);
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    function startDrawing(e) {
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    }
+
+    function stopDrawing() {
+      isDrawing = false;
+    }
+
+    function clearCanvas() {
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      document.getElementById('output').innerText = "Prediction: -";
+    }
+
+    // Preprocess image and predict digit
+    async function predictDigit() {
+      if (!model) return;
+
+      // 1. Get raw image tensor from canvas
+      const rawImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      const predictedDigit = tf.tidy(() => {
+        // 2. Convert canvas image to tensor
+        let tensor = tf.browser.fromPixels(rawImageData, 1); // Grayscale
+        
+        // 3. Resize to 28x28 (MNIST input standard)
+        tensor = tf.image.resizeBilinear(tensor, [28, 28]);
+        
+        // 4. Normalize pixel values from 0-255 to 0.0-1.0
+        tensor = tensor.div(255.0);
+        
+        // 5. Expand dimensions to fit model input batch [1, 28, 28, 1]
+        tensor = tensor.expandDims(0);
+
+        // 6. Predict using model
+        const predictions = model.predict(tensor);
+        return predictions.argMax(1).dataSync()[0];
+      });
+
+      document.getElementById('output').innerText = `Prediction: ${predictedDigit}`;
+    }
+
+    // Initialize black background on load
+    clearCanvas();
+  </script>
+</body>
+</html>
